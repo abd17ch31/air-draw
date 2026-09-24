@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Air Draw</title>
+  <meta name="theme-color" content="#0a0a0a" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Air Draw" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #fff;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ============================================================
+       PASSWORD GATE
+       ============================================================ */
+    .password-gate {
+      position: fixed;
+      inset: 0;
+      background: #0a0a0a;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.35s ease;
+    }
+    .password-gate.hidden {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+
+    .password-card {
+      width: min(340px, 88vw);
+      background: rgba(20, 20, 20, 0.95);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 18px;
+      padding: 28px 22px 22px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+    .password-card .lock-icon { font-size: 40px; margin-bottom: 8px; line-height: 1; }
+    .password-card h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+    .password-card p  { font-size: 13px; opacity: 0.5; margin-bottom: 20px; }
+    .password-card input {
+      width: 100%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 15px;
+      color: #fff;
+      outline: none;
+      font-family: inherit;
+      margin-bottom: 12px;
+      text-align: center;
+      letter-spacing: 2px;
+    }
+    .password-card input:focus {
+      border-color: rgba(59, 130, 246, 0.7);
+      background: rgba(255,255,255,0.1);
+    }
+    .password-card button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      background: #3b82f6;
+      border: none;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .password-card button:hover { background: #2563eb; }
+    .password-card button:active { transform: scale(0.97); }
+    .password-card button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .password-error { color: #ff6b6b; font-size: 12px; margin-top: 10px; min-height: 16px; }
+
+    /* ============================================================
+       STAGE
+       ============================================================ */
+    .stage {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      gap: 2px;
+      background: #000;
+    }
+
+    .video-wrap {
+      position: relative;
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .video-wrap video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      display: block;
+    }
+    #remoteVideo { transform: none; }
+
+    .video-wrap canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .video-wrap .stroke-canvas { z-index: 2; pointer-events: none; }
+    .video-wrap .cursor-canvas {
+      z-index: 3;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .video-wrap .label {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      padding: 4px 10px;
+      border-radius: 6px;
+      z-index: 4;
+      letter-spacing: 0.3px;
+      pointer-events: none;
+    }
+
+    .status {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      padding: 6px 14px;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(6px);
+      border-radius: 8px;
+      z-index: 50;
+      text-align: center;
+      max-width: calc(100vw - 24px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      opacity: 0.85;
+      transition: opacity 0.3s;
+    }
+    .status.error { color: #ff6b6b; opacity: 1; }
+    .status.ok    { color: #4ade80; opacity: 1; }
+
+    /* ------- Corner buttons ------- */
+    .settings-btn,
+    .chat-btn,
+    .mic-btn,
+    .flip-btn {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 25;
+      color: white;
+      transition: background 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+    .settings-btn { top: 10px;  left: 10px; }
+    .flip-btn     { top: 62px;  left: 10px; }
+    .chat-btn     { top: 10px;  right: 10px; }
+    .mic-btn      { top: 62px;  right: 10px; }
+
+    .settings-btn:active,
+    .chat-btn:active,
+    .mic-btn:active,
+    .flip-btn:active { transform: scale(0.94); }
+
+    .settings-btn svg,
+    .chat-btn svg,
+    .mic-btn svg,
+    .flip-btn svg { width: 22px; height: 22px; }
+
+    .settings-btn.open svg { transform: rotate(90deg); transition: transform 0.35s ease; }
+    .chat-btn.open { background: rgba(59, 130, 246, 0.45); }
+    .mic-btn.muted { background: rgba(239, 68, 68, 0.55); }
+
+    .flip-btn.flipping svg { animation: spin 0.6s ease; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
+
+    .chat-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+      transform: scale(0);
+      transition: transform 0.2s ease;
+    }
+    .chat-badge.show { transform: scale(1); }
+
+    /* ------- Chat panel ------- */
+    .chat-panel {
+      position: absolute;
+      top: 62px;
+      right: 10px;
+      width: 270px;
+      max-height: min(400px, 65vh);
+      background: rgba(20, 20, 20, 0.68);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      z-index: 26;
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+      transform-origin: top right;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .chat-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+    .chat-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      opacity: 0.9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chat-header .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      margin-right: 6px;
+      display: inline-block;
+      transition: background 0.3s;
+    }
+    .chat-header .dot.off { background: #666; }
+    .chat-header-left { display: flex; align-items: center; }
+
+    .chat-messages {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 10px 10px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 80px;
+      max-height: 320px;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+    .chat-empty { font-size: 11px; opacity: 0.45; text-align: center; padding: 20px 8px; }
+
+    .chat-msg { display: flex; flex-direction: column; max-width: 80%; animation: chatIn 0.18s ease; }
+    .chat-msg.me   { align-self: flex-end; align-items: flex-end; }
+    .chat-msg.peer { align-self: flex-start; align-items: flex-start; }
+    @keyframes chatIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .chat-bubble {
+      padding: 7px 11px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-word;
+      white-space: pre-wrap;
+      max-width: 100%;
+    }
+    .chat-msg.me .chat-bubble { background: #3b82f6; color: #fff; border-bottom-right-radius: 4px; }
+    .chat-msg.peer .chat-bubble { background: rgba(255,255,255,0.14); color: #eee; border-bottom-left-radius: 4px; }
+    .chat-msg .chat-time { font-size: 10px; opacity: 0.4; margin-top: 2px; padding: 0 4px; }
+
+    .chat-input-row {
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.2);
+    }
+    .chat-input {
+      flex: 1 1 auto;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      color: #fff;
+      outline: none;
+      font-family: inherit;
+      min-width: 0;
+    }
+    .chat-input::placeholder { color: rgba(255,255,255,0.35); }
+    .chat-input:focus { border-color: rgba(59, 130, 246, 0.7); background: rgba(255,255,255,0.13); }
+
+    .chat-send {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #3b82f6;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      flex-shrink: 0;
+    }
+    .chat-send:active { transform: scale(0.92); background: #2563eb; }
+    .chat-send svg { width: 18px; height: 18px; }
+
+    /* ------- Settings menu ------- */
+    .settings-menu {
+      position: absolute;
+      top: 62px;
+      left: 10px;
+      background: rgba(20, 20, 20, 0.68);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      padding: 12px;
+      z-index: 25;
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+      transform-origin: top left;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: min(72vh, 520px);
+      overflow-y: auto;
+    }
+    .settings-menu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+    .section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.5;
+      margin-left: 2px;
+    }
+
+    .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+    .divider { height: 1px; background: rgba(255,255,255,0.12); margin: 2px 0; }
+    .tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+    .size-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+
+    .color-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      position: relative;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      border: 2px solid transparent;
+      cursor: pointer;
+    }
+    .color-swatch:active { transform: scale(0.9); }
+    .color-swatch.active { border-color: #fff; box-shadow: 0 0 0 1px #fff, 0 0 12px rgba(255,255,255,0.5); }
+
+    .tool-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.85);
+      position: relative;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .tool-btn svg { width: 18px; height: 18px; }
+    .tool-btn:active { transform: scale(0.9); }
+    .tool-btn.active { background: rgba(255,255,255,0.28); color: #fff; border-color: rgba(255,255,255,0.6); box-shadow: 0 0 10px rgba(255,255,255,0.25); }
+    .tool-btn.danger { color: #ff8080; }
+    .tool-btn.danger:active { background: rgba(255,80,80,0.25); color: #fff; }
+
+    .size-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .size-btn:active { transform: scale(0.9); }
+    .size-btn.active {
+      background: rgba(255,255,255,0.28);
+      border-color: rgba(255,255,255,0.6);
+      box-shadow: 0 0 10px rgba(255,255,255,0.25);
+    }
+    .size-dot { background: #fff; border-radius: 50%; display: block; }
+
+    @media (max-width: 900px) and (orientation: portrait) {
+      .stage { flex-direction: column; gap: 2px; }
+      .video-wrap { flex: 1 1 50%; }
+      .status { bottom: 8px; font-size: 11px; }
+      .settings-btn, .chat-btn, .mic-btn, .flip-btn { width: 40px; height: 40px; }
+      .flip-btn, .mic-btn { top: 56px; }
+      .chat-panel { width: calc(100vw - 20px); max-height: 55vh; }
+      .settings-menu { max-height: 60vh; }
+    }
+    @media (max-width: 900px) and (orientation: landscape) {
+      .stage { flex-direction: row; }
+      .video-wrap { flex: 1 1 50%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       PASSWORD GATE
+       ============================================================ -->
+  <div class="password-gate" id="passwordGate">
+    <div class="password-card">
+      <div class="lock-icon">🔒</div>
+      <h2>Air Draw</h2>
+      <p>Enter the room password to continue</p>
+      <input type="password" id="passwordInput" placeholder="Password" autocomplete="off" />
+      <button id="passwordSubmit">Enter</button>
+      <div class="password-error" id="passwordError"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MAIN APP
+       ============================================================ -->
+  <div class="stage">
+    <div class="video-wrap">
+      <video id="localVideo" autoplay playsinline muted></video>
+      <canvas id="localCanvas" class="stroke-canvas"></canvas>
+      <canvas id="localCursorCanvas" class="cursor-canvas"></canvas>
+      <span class="label">Me</span>
+
+      <!-- ⚙️ Settings -->
+      <div class="settings-btn" id="settingsBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </div>
+
+      <!-- 🔄 Flip camera -->
+      <div class="flip-btn" id="flipBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </div>
+
+      <!-- 💬 Chat -->
+      <div class="chat-btn" id="chatBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+        </svg>
+        <div class="chat-badge" id="chatBadge">0</div>
+      </div>
+
+      <!-- 🎤 Mic -->
+      <div class="mic-btn" id="micBtn">
+        <svg id="micOnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+        <svg id="micOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </div>
+
+      <!-- 💬 Chat panel -->
+      <div class="chat-panel" id="chatPanel">
+        <div class="chat-header">
+          <div class="chat-header-left">
+            <span class="dot off" id="chatDot"></span>
+            Chat
+          </div>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-empty" id="chatEmpty">No messages yet. Say hi 👋</div>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Type a message…" maxlength="500" autocomplete="off" />
+          <button class="chat-send" id="chatSend" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ⚙️ Settings menu -->
+      <div class="settings-menu" id="settingsMenu">
+        <div class="section-title">Color</div>
+        <div class="color-grid">
+          <div class="color-swatch" data-color="#ff3366" style="background:#ff3366"></div>
+          <div class="color-swatch" data-color="#00aaff" style="background:#00aaff"></div>
+          <div class="color-swatch" data-color="#22c55e" style="background:#22c55e"></div>
+          <div class="color-swatch" data-color="#facc15" style="background:#facc15"></div>
+          <div class="color-swatch" data-color="#a855f7" style="background:#a855f7"></div>
+          <div class="color-swatch" data-color="#ff9500" style="background:#ff9500"></div>
+          <div class="color-swatch" data-color="#ffffff" style="background:#ffffff"></div>
+          <div class="color-swatch" data-color="#111111" style="background:#111111;border:1px solid #333"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-title">Size</div>
+        <div class="size-grid" id="sizeGrid">
+          <div class="size-btn" data-size="0"><span class="size-dot" style="width:6px;height:6px"></span></div>
+          <div class="size-btn" data-size="1"><span class="size-dot" style="width:10px;height:10px"></span></div>
+          <div class="size-btn" data-size="2"><span class="size-dot" style="width:16px;height:16px"></span></div>
+          <div class="size-btn" data-size="3"><span class="size-dot" style="width:22px;height:22px"></span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-title">Tool</div>
+        <div class="tool-grid">
+          <div class="tool-btn" data-tool="freehand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+              <path d="M2 2l7.586 7.586"></path>
+              <circle cx="11" cy="11" r="2"></circle>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="eraser">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 20H7L3 16a2 2 0 0 1 0-2.83l9.17-9.17a2 2 0 0 1 2.83 0l5.99 5.99a2 2 0 0 1 0 2.83L14 20"></path>
+              <line x1="6" y1="11" x2="15" y2="20"></line>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="line">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="4" y1="20" x2="20" y2="4"></line>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="circle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9"></circle>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="rect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+              <rect x="4" y="5" width="16" height="14" rx="1"></rect>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="triangle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+              <polygon points="12,4 21,20 3,20"></polygon>
+            </svg>
+          </div>
+          <div class="tool-btn" data-tool="arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="20" x2="20" y2="4"></line>
+              <polyline points="11,4 20,4 20,13"></polyline>
+            </svg>
+          </div>
+          <div class="tool-btn danger" data-tool="clear">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3,6 5,6 21,6"></polyline>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+              <path d="M10 11v6M14 11v6"></path>
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="video-wrap">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <canvas id="remoteCanvas" class="stroke-canvas"></canvas>
+      <canvas id="remoteCursorCanvas" class="cursor-canvas"></canvas>
+      <span class="label">Friend</span>
+    </div>
+  </div>
+
+  <div class="status" id="status">Waiting for password…</div>
+
+  <script>
+    // =========================================================
+    // DOM
+    // =========================================================
+    const localVideo         = document.getElementById('localVideo');
+    const remoteVideo        = document.getElementById('remoteVideo');
+    const localCanvas        = document.getElementById('localCanvas');
+    const localCursorCanvas  = document.getElementById('localCursorCanvas');
+    const remoteCanvas       = document.getElementById('remoteCanvas');
+    const remoteCursorCanvas = document.getElementById('remoteCursorCanvas');
+
+    const localCtx        = localCanvas.getContext('2d');
+    const localCursorCtx  = localCursorCanvas.getContext('2d');
+    const remoteCtx       = remoteCanvas.getContext('2d');
+    const remoteCursorCtx = remoteCursorCanvas.getContext('2d');
+
+    const statusEl        = document.getElementById('status');
+    const passwordGate    = document.getElementById('passwordGate');
+    const passwordInput   = document.getElementById('passwordInput');
+    const passwordSubmit  = document.getElementById('passwordSubmit');
+    const passwordError   = document.getElementById('passwordError');
+    const settingsBtn     = document.getElementById('settingsBtn');
+    const settingsMenu    = document.getElementById('settingsMenu');
+    const swatches        = Array.from(document.querySelectorAll('.color-swatch'));
+    const toolButtons     = Array.from(document.querySelectorAll('.tool-btn'));
+    const sizeButtons     = Array.from(document.querySelectorAll('.size-btn'));
+
+    const chatBtn      = document.getElementById('chatBtn');
+    const chatPanel    = document.getElementById('chatPanel');
+    const chatBadge    = document.getElementById('chatBadge');
+    const chatDot      = document.getElementById('chatDot');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatEmpty    = document.getElementById('chatEmpty');
+    const chatInput    = document.getElementById('chatInput');
+    const chatSend     = document.getElementById('chatSend');
+
+    const micBtn     = document.getElementById('micBtn');
+    const micOnIcon  = document.getElementById('micOnIcon');
+    const micOffIcon = document.getElementById('micOffIcon');
+
+    const flipBtn    = document.getElementById('flipBtn');
+
+    // =========================================================
+    // STATE
+    // =========================================================
+    let localStream   = null;
+    let authenticated = false;
+    let password      = '';
+
+    // strokes = left pane (Me)  /  remoteStrokes = right pane (Friend)
+    // Both are drawn by me locally. Remote peer's strokes get appended to the
+    // same panes based on their target — same pane on both devices.
+    let strokes            = [];
+    let remoteStrokes      = [];
+    let activeStroke       = null;
+    let remoteActiveStroke = null;
+
+    let currentTool  = 'freehand';
+    let shapeStroke  = null;
+
+    let penSizeIdx    = 1;
+    let eraserSizeIdx = 1;
+    const PEN_WIDTHS   = [2, 4, 8, 16];
+    const ERASER_RADII = [0.018, 0.035, 0.06, 0.10];
+    function getPenWidth()     { return PEN_WIDTHS[penSizeIdx]; }
+    function getEraserRadius() { return ERASER_RADII[eraserSizeIdx]; }
+
+    // Pointer
+    let pointerActive  = false;
+    let pointerId      = null;
+    let pointerTarget  = null;   // 'own' (Me pane) | 'peer' (Friend pane) | null
+    let localCursorPos = null;
+
+    // Peer cursor mirrored to my panes ('own' → Me pane, 'peer' → Friend pane)
+    let peerCursorPane = null;
+    let peerCursorPos  = null;
+    let peerPenDown    = false;
+    let peerTool       = 'freehand';
+
+    let myStrokeCounter = 0;
+    let MY_COLOR   = '#ff3366';
+    let PEER_COLOR = '#00aaff';
+
+    let chatOpen    = false;
+    let unreadCount = 0;
+    let micMuted    = false;
+    let currentFacingMode = 'user';   // 'user' = front, 'environment' = back
+
+    let ws          = null;
+    let pc          = null;
+    let dataChannel = null;
+    let isInitiator = false;
+    const pendingCandidates = [];
+
+    const ICE_SERVERS = {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+
+    // =========================================================
+    // UTILS
+    // =========================================================
+    function setStatus(msg, kind = '') {
+      statusEl.textContent = msg;
+      statusEl.className = 'status' + (kind ? ' ' + kind : '');
+      console.log('[status]', msg);
+    }
+    function isShapeTool(tool) {
+      return tool === 'line' || tool === 'circle' || tool === 'rect' ||
+             tool === 'triangle' || tool === 'arrow';
+    }
+    function formatTime(ts) {
+      return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+
+    // =========================================================
+    // CANVAS SIZING
+    // =========================================================
+    function resizeCanvases() {
+      for (const c of [localCanvas, localCursorCanvas, remoteCanvas, remoteCursorCanvas]) {
+        const r = c.getBoundingClientRect();
+        c.width  = r.width;
+        c.height = r.height;
+      }
+      redrawAllLocal();
+      redrawAllRemote();
+      redrawCursors();
+    }
+    window.addEventListener('resize', resizeCanvases);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvases, 200));
+
+    // =========================================================
+    // CAMERA + MIC
+    // =========================================================
+    async function startCamera() {
+      try {
+        setStatus('Requesting camera + mic permission...');
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl:  true
+          }
+        });
+        localVideo.srcObject = localStream;
+        localVideo.onloadedmetadata = () => {
+          resizeCanvases();
+          setStatus('✅ Ready — draw with your finger.', 'ok');
+        };
+      } catch (err) {
+        console.error(err);
+        setStatus(`❌ Camera/mic error: ${err.message}`, 'error');
+      }
+    }
+
+    // =========================================================
+    // COORDINATE MAPPING
+    // =========================================================
+    function normalizedToCanvas(pt, canvas) {
+      return { x: pt.x * canvas.width, y: pt.y * canvas.height };
+    }
+
+    // =========================================================
+    // SHAPE PATH
+    // =========================================================
+    function shapePath(tool, a, b) {
+      if (tool === 'line') return [a, b];
+      if (tool === 'circle') {
+        const r = Math.hypot(b.x - a.x, b.y - a.y);
+        const pts = []; const N = 48;
+        for (let i = 0; i <= N; i++) {
+          const t = (i / N) * Math.PI * 2;
+          pts.push({ x: a.x + Math.cos(t) * r, y: a.y + Math.sin(t) * r });
+        }
+        return pts;
+      }
+      if (tool === 'rect') {
+        return [{x:a.x,y:a.y},{x:b.x,y:a.y},{x:b.x,y:b.y},{x:a.x,y:b.y},{x:a.x,y:a.y}];
+      }
+      if (tool === 'triangle') {
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+        const r = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+        const pts = [];
+        for (let i = 0; i < 3; i++) {
+          const ang = -Math.PI / 2 + (i * 2 * Math.PI) / 3;
+          pts.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r });
+        }
+        pts.push(pts[0]);
+        return pts;
+      }
+      if (tool === 'arrow') {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-4) return [a, b];
+        const ux = dx / len, uy = dy / len;
+        const headLen = Math.min(0.06, len * 0.35);
+        const headW = headLen * 0.55;
+        const px = -uy, py = ux;
+        const h1 = { x: b.x - ux * headLen + px * headW, y: b.y - uy * headLen + py * headW };
+        const h2 = { x: b.x - ux * headLen - px * headW, y: b.y - uy * headLen - py * headW };
+        return [a, b, h1, b, h2];
+      }
+      return [a, b];
+    }
+
+    // =========================================================
+    // RENDERING
+    // =========================================================
+    function drawPolyline(ctx, pts, canvas, color, width) {
+      if (pts.length < 2) return;
+      ctx.beginPath();
+      const p0 = normalizedToCanvas(pts[0], canvas);
+      ctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = normalizedToCanvas(pts[i], canvas);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = width;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+      ctx.stroke();
+    }
+    function drawStrokeOn(ctx, stroke, canvas) {
+      if (stroke.tool === 'freehand') {
+        if (stroke.points.length < 2) return;
+        drawPolyline(ctx, stroke.points, canvas, stroke.color, stroke.width);
+      } else {
+        if (!stroke.a || !stroke.b) return;
+        const pts = shapePath(stroke.tool, stroke.a, stroke.b);
+        drawPolyline(ctx, pts, canvas, stroke.color, stroke.width);
+      }
+    }
+    function drawLastSegment(ctx, stroke, canvas) {
+      const n = stroke.points.length;
+      if (n < 2) return;
+      const p1 = normalizedToCanvas(stroke.points[n - 2], canvas);
+      const p2 = normalizedToCanvas(stroke.points[n - 1], canvas);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth   = stroke.width;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+      ctx.stroke();
+    }
+    function redrawAllLocal() {
+      localCtx.clearRect(0, 0, localCanvas.width, localCanvas.height);
+      for (const s of strokes) drawStrokeOn(localCtx, s, localCanvas);
+    }
+    function redrawAllRemote() {
+      remoteCtx.clearRect(0, 0, remoteCanvas.width, remoteCanvas.height);
+      for (const s of remoteStrokes) drawStrokeOn(remoteCtx, s, remoteCanvas);
+    }
+    function drawCursorOn(ctx, canvas, pt, color, isDown, tool) {
+      if (!pt) return;
+      const p = normalizedToCanvas(pt, canvas);
+
+      if (tool === 'eraser') {
+        const rPx = getEraserRadius() * Math.min(canvas.width, canvas.height) / 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rPx, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      } else if (isShapeTool(tool)) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isDown ? 4 : 7, 0, Math.PI * 2);
+        ctx.fillStyle = isDown ? color : color + 'aa';
+        ctx.fill();
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        const r = Math.max(5, getPenWidth());
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isDown ? r * 0.7 : r + 4, 0, Math.PI * 2);
+        ctx.fillStyle   = isDown ? color : color + 'aa';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isDown ? 'white' : 'rgba(0,0,0,0.45)';
+        ctx.stroke();
+      }
+    }
+    function redrawCursors() {
+      // Me pane cursor layer
+      localCursorCtx.clearRect(0, 0, localCursorCanvas.width, localCursorCanvas.height);
+      if (localCursorPos && pointerTarget === 'own') {
+        drawCursorOn(localCursorCtx, localCursorCanvas, localCursorPos, MY_COLOR, pointerActive, currentTool);
+      }
+      if (peerCursorPos && peerCursorPane === 'own') {
+        drawCursorOn(localCursorCtx, localCursorCanvas, peerCursorPos, PEER_COLOR, peerPenDown, peerTool);
+      }
+      // Friend pane cursor layer
+      remoteCursorCtx.clearRect(0, 0, remoteCursorCanvas.width, remoteCursorCanvas.height);
+      if (localCursorPos && pointerTarget === 'peer') {
+        drawCursorOn(remoteCursorCtx, remoteCursorCanvas, localCursorPos, MY_COLOR, pointerActive, currentTool);
+      }
+      if (peerCursorPos && peerCursorPane === 'peer') {
+        drawCursorOn(remoteCursorCtx, remoteCursorCanvas, peerCursorPos, PEER_COLOR, peerPenDown, peerTool);
+      }
+    }
+
+    // =========================================================
+    // ERASE
+    // =========================================================
+    function eraseAtInStrokes(strokesArr, ptNorm, radiusNorm, canvas) {
+      const pc = normalizedToCanvas(ptNorm, canvas);
+      const rPx = radiusNorm * Math.min(canvas.width, canvas.height) / 2;
+      const r2 = rPx * rPx;
+      let changed = false;
+
+      for (let i = strokesArr.length - 1; i >= 0; i--) {
+        const s = strokesArr[i];
+        if (s.tool !== 'freehand') {
+          const pa = normalizedToCanvas(s.a, canvas);
+          const pb = normalizedToCanvas(s.b, canvas);
+          const dA = (pa.x - pc.x) ** 2 + (pa.y - pc.y) ** 2;
+          const dB = (pb.x - pc.x) ** 2 + (pb.y - pc.y) ** 2;
+          if (dA < r2 || dB < r2) { strokesArr.splice(i, 1); changed = true; }
+          continue;
+        }
+        const kept = [];
+        for (const p of s.points) {
+          const ppx = normalizedToCanvas(p, canvas);
+          const d2 = (ppx.x - pc.x) ** 2 + (ppx.y - pc.y) ** 2;
+          if (d2 > r2) kept.push(p);
+        }
+        if (kept.length !== s.points.length) {
+          if (kept.length < 2) strokesArr.splice(i, 1);
+          else s.points = kept;
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    // =========================================================
+    // UNIFIED DRAW ACTIONS — target-aware
+    //   'own'  → my LEFT pane   (Me)
+    //   'peer' → my RIGHT pane  (Friend)
+    // =========================================================
+    function arrForTarget(target)   { return target === 'peer' ? remoteStrokes : strokes; }
+    function canvasForTarget(target){ return target === 'peer' ? remoteCanvas  : localCanvas; }
+    function ctxForTarget(target)   { return target === 'peer' ? remoteCtx     : localCtx; }
+    function redrawTarget(target)   {
+      if (target === 'peer') redrawAllRemote();
+      else redrawAllLocal();
+    }
+
+    function beginDrawAt(pt, target) {
+      const arr    = arrForTarget(target);
+      const canvas = canvasForTarget(target);
+
+      if (currentTool === 'eraser') {
+        const changed = eraseAtInStrokes(arr, pt, getEraserRadius(), canvas);
+        if (changed) redrawTarget(target);
+        sendErase(pt.x, pt.y, getEraserRadius(), target);
+        return;
+      }
+      if (isShapeTool(currentTool)) {
+        shapeStroke = {
+          id: `s${++myStrokeCounter}`,
+          tool: currentTool, color: MY_COLOR, width: getPenWidth(),
+          a: { x: pt.x, y: pt.y }, b: { x: pt.x, y: pt.y }
+        };
+        arr.push(shapeStroke);
+        sendShape(shapeStroke, false, target);
+        return;
+      }
+      activeStroke = {
+        id: `s${++myStrokeCounter}`,
+        tool: 'freehand', points: [{ x: pt.x, y: pt.y }],
+        color: MY_COLOR, width: getPenWidth()
+      };
+      arr.push(activeStroke);
+      sendStrokeStart(activeStroke.id, activeStroke.color, activeStroke.width, target);
+      sendStrokePoint(activeStroke.id, pt.x, pt.y);
+    }
+
+    function moveDrawAt(pt, target) {
+      const arr    = arrForTarget(target);
+      const canvas = canvasForTarget(target);
+      const ctx    = ctxForTarget(target);
+
+      if (currentTool === 'eraser') {
+        const changed = eraseAtInStrokes(arr, pt, getEraserRadius(), canvas);
+        if (changed) redrawTarget(target);
+        sendErase(pt.x, pt.y, getEraserRadius(), target);
+        return;
+      }
+      if (isShapeTool(currentTool)) {
+        if (shapeStroke) {
+          shapeStroke.b = { x: pt.x, y: pt.y };
+          redrawTarget(target);
+          sendShape(shapeStroke, false, target);
+        }
+        return;
+      }
+      if (activeStroke) {
+        const last = activeStroke.points[activeStroke.points.length - 1];
+        if (!last || Math.hypot(pt.x - last.x, pt.y - last.y) > 0.003) {
+          activeStroke.points.push({ x: pt.x, y: pt.y });
+          drawLastSegment(ctx, activeStroke, canvas);
+          sendStrokePoint(activeStroke.id, pt.x, pt.y);
+        }
+      }
+    }
+
+    function endDrawAt(pt, target) {
+      if (currentTool === 'eraser') return;
+      if (isShapeTool(currentTool)) {
+        if (shapeStroke) {
+          if (pt) shapeStroke.b = { x: pt.x, y: pt.y };
+          redrawTarget(target);
+          sendShape(shapeStroke, true, target);
+        }
+        shapeStroke = null;
+        return;
+      }
+      activeStroke = null;
+    }
+
+    // =========================================================
+    // SETTINGS UI
+    // =========================================================
+    function openMenu() {
+      if (chatOpen) closeChat();
+      settingsMenu.classList.add('open');
+      settingsBtn.classList.add('open');
+      refreshActiveSwatch();
+      refreshActiveTool();
+      refreshActiveSize();
+    }
+    function closeMenu() {
+      settingsMenu.classList.remove('open');
+      settingsBtn.classList.remove('open');
+    }
+    function refreshActiveSwatch() {
+      swatches.forEach(sw => sw.classList.toggle('active', sw.dataset.color === MY_COLOR));
+    }
+    function refreshActiveTool() {
+      toolButtons.forEach(tb => tb.classList.toggle('active', tb.dataset.tool === currentTool));
+    }
+    function refreshActiveSize() {
+      const idx = currentTool === 'eraser' ? eraserSizeIdx : penSizeIdx;
+      sizeButtons.forEach(sb => sb.classList.toggle('active', Number(sb.dataset.size) === idx));
+    }
+    function selectColor(color) {
+      MY_COLOR = color;
+      if (currentTool === 'eraser') { currentTool = 'freehand'; refreshActiveTool(); refreshActiveSize(); }
+      refreshActiveSwatch();
+      redrawCursors();
+      setStatus(`🎨 Color: ${color}`, 'ok');
+    }
+    function selectTool(tool) {
+      if (tool === 'clear') {
+        strokes.length = 0; remoteStrokes.length = 0;
+        activeStroke = null; shapeStroke = null;
+        redrawAllLocal(); redrawAllRemote(); redrawCursors();
+        sendClear();
+        return;
+      }
+      currentTool = tool;
+      shapeStroke = null;
+      refreshActiveTool();
+      refreshActiveSize();
+      redrawCursors();
+      setStatus(`🛠 Tool: ${tool}`, 'ok');
+    }
+    function selectSize(idx) {
+      if (currentTool === 'eraser') eraserSizeIdx = idx;
+      else penSizeIdx = idx;
+      refreshActiveSize();
+      redrawCursors();
+      setStatus(`📏 Size: ${idx + 1}/4`, 'ok');
+    }
+
+    // =========================================================
+    // CHAT
+    // =========================================================
+    function openChat() {
+      if (settingsMenu.classList.contains('open')) closeMenu();
+      chatOpen = true;
+      chatPanel.classList.add('open');
+      chatBtn.classList.add('open');
+      unreadCount = 0;
+      updateChatBadge();
+      if (!('ontouchstart' in window)) chatInput.focus();
+      scrollChatToBottom();
+    }
+    function closeChat() {
+      chatOpen = false;
+      chatPanel.classList.remove('open');
+      chatBtn.classList.remove('open');
+      chatInput.blur();
+    }
+    function toggleChat() { chatOpen ? closeChat() : openChat(); }
+    function updateChatBadge() {
+      if (unreadCount > 0) {
+        chatBadge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
+        chatBadge.classList.add('show');
+      } else chatBadge.classList.remove('show');
+    }
+    function scrollChatToBottom() {
+      requestAnimationFrame(() => { chatMessages.scrollTop = chatMessages.scrollHeight; });
+    }
+    function appendChatMessage(text, from, timeMs) {
+      if (chatEmpty && chatEmpty.parentNode) chatEmpty.parentNode.removeChild(chatEmpty);
+      const wrap = document.createElement('div');
+      wrap.className = 'chat-msg ' + (from === 'me' ? 'me' : 'peer');
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      bubble.textContent = text;
+      const time = document.createElement('div');
+      time.className = 'chat-time';
+      time.textContent = formatTime(timeMs || Date.now());
+      wrap.appendChild(bubble);
+      wrap.appendChild(time);
+      chatMessages.appendChild(wrap);
+      if (from === 'peer' && !chatOpen) { unreadCount++; updateChatBadge(); }
+      scrollChatToBottom();
+    }
+    function sendChatMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      appendChatMessage(text, 'me', Date.now());
+      sendChat(text);
+      chatInput.value = '';
+      chatInput.focus();
+    }
+
+    // =========================================================
+    // MIC
+    // =========================================================
+    micBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!localStream) return;
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (!audioTrack) { setStatus('No mic available', 'error'); return; }
+      micMuted = !micMuted;
+      audioTrack.enabled = !micMuted;
+      micOnIcon.style.display  = micMuted ? 'none' : 'block';
+      micOffIcon.style.display = micMuted ? 'block' : 'none';
+      micBtn.classList.toggle('muted', micMuted);
+      setStatus(micMuted ? '🔇 Mic muted' : '🎤 Mic on', 'ok');
+    });
+
+    // =========================================================
+    // FLIP CAMERA (front ↔ back)
+    // =========================================================
+    flipBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!localStream) return;
+
+      const newFacing = currentFacingMode === 'user' ? 'environment' : 'user';
+      flipBtn.classList.add('flipping');
+
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width:      { ideal: 1280 },
+            height:     { ideal: 720 },
+            frameRate:  { ideal: 60, min: 30 },
+            facingMode: newFacing
+          },
+          audio: false
+        });
+
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const oldVideoTrack = localStream.getVideoTracks()[0];
+
+        if (oldVideoTrack) {
+          localStream.removeTrack(oldVideoTrack);
+          oldVideoTrack.stop();
+        }
+        localStream.addTrack(newVideoTrack);
+
+        if (pc) {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) await sender.replaceTrack(newVideoTrack);
+        }
+
+        localVideo.srcObject = localStream;
+        localVideo.style.transform = newFacing === 'user' ? 'scaleX(-1)' : 'none';
+        currentFacingMode = newFacing;
+
+        setStatus(`📷 ${newFacing === 'user' ? 'Front' : 'Back'} camera`, 'ok');
+      } catch (err) {
+        console.error('Flip failed:', err);
+        setStatus(`❌ Camera flip failed: ${err.message}`, 'error');
+      } finally {
+        setTimeout(() => flipBtn.classList.remove('flipping'), 700);
+      }
+    });
+
+    // =========================================================
+    // PASSWORD GATE
+    // =========================================================
+    async function submitPassword() {
+      const pw = passwordInput.value;
+      if (!pw) { passwordError.textContent = 'Enter a password'; return; }
+      passwordSubmit.disabled = true;
+      passwordError.textContent = '';
+      password = pw;
+      await connectSignaling();
+    }
+    passwordSubmit.addEventListener('click', submitPassword);
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitPassword(); }
+    });
+    try {
+      const savedPw = localStorage.getItem('airdraw_pw');
+      if (savedPw) passwordInput.value = savedPw;
+    } catch {}
+    setTimeout(() => passwordInput.focus(), 100);
+
+    // =========================================================
+    // POINTER EVENTS — one per pane
+    // =========================================================
+    function pointerToNormalized(e, canvasEl) {
+      const rect = canvasEl.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top)  / rect.height
+      };
+    }
+
+    function setupPointerHandlers(canvasEl, target) {
+      canvasEl.addEventListener('pointerdown', (e) => {
+        if (pointerActive) return;
+        pointerActive  = true;
+        pointerId      = e.pointerId;
+        pointerTarget  = target;
+        localCursorPos = pointerToNormalized(e, canvasEl);
+        try { canvasEl.setPointerCapture(e.pointerId); } catch {}
+        redrawCursors();
+        sendCursor(localCursorPos.x, localCursorPos.y, true, currentTool, target);
+        beginDrawAt(localCursorPos, target);
+      });
+
+      canvasEl.addEventListener('pointermove', (e) => {
+        if (pointerActive) {
+          if (e.pointerId !== pointerId) return;
+          if (pointerTarget !== target) return;
+          localCursorPos = pointerToNormalized(e, canvasEl);
+          redrawCursors();
+          sendCursor(localCursorPos.x, localCursorPos.y, true, currentTool, target);
+          moveDrawAt(localCursorPos, target);
+          return;
+        }
+        if (e.pointerType === 'mouse') {
+          localCursorPos = pointerToNormalized(e, canvasEl);
+          pointerTarget  = target;
+          redrawCursors();
+          sendCursor(localCursorPos.x, localCursorPos.y, false, currentTool, target);
+        }
+      });
+
+      function finish(e, cancelled) {
+        if (!pointerActive || e.pointerId !== pointerId) return;
+        if (pointerTarget !== target) return;
+        const pt = pointerToNormalized(e, canvasEl);
+        endDrawAt(cancelled ? null : pt, target);
+        pointerActive = false;
+        pointerId     = null;
+        if (e.pointerType !== 'mouse') {
+          localCursorPos = null;
+          pointerTarget  = null;
+        }
+        redrawCursors();
+      }
+      canvasEl.addEventListener('pointerup',     (e) => finish(e, false));
+      canvasEl.addEventListener('pointercancel', (e) => finish(e, true));
+
+      canvasEl.addEventListener('pointerleave', (e) => {
+        if (pointerActive) return;
+        if (e.pointerType === 'mouse') {
+          localCursorPos = null;
+          pointerTarget  = null;
+          redrawCursors();
+        }
+      });
+    }
+
+    setupPointerHandlers(localCursorCanvas,  'own');   // Me pane (left)
+    setupPointerHandlers(remoteCursorCanvas, 'peer');  // Friend pane (right)
+
+    // ---- UI taps ----
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (settingsMenu.classList.contains('open')) closeMenu(); else openMenu();
+    });
+    swatches.forEach(sw => {
+      sw.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectColor(sw.dataset.color);
+        closeMenu();
+      });
+    });
+    toolButtons.forEach(tb => {
+      tb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tool = tb.dataset.tool;
+        selectTool(tool);
+        if (tool !== 'clear') closeMenu();
+      });
+    });
+    sizeButtons.forEach(sb => {
+      sb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectSize(Number(sb.dataset.size));
+      });
+    });
+
+    chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(); });
+    chatSend.addEventListener('click', (e) => { e.stopPropagation(); sendChatMessage(); });
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); }
+      e.stopPropagation();
+    });
+    chatPanel.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    document.addEventListener('pointerdown', (e) => {
+      if (settingsMenu.classList.contains('open')) {
+        if (!settingsMenu.contains(e.target) && !settingsBtn.contains(e.target)) closeMenu();
+      }
+      if (chatOpen) {
+        if (!chatPanel.contains(e.target) && !chatBtn.contains(e.target)) closeChat();
+      }
+    });
+
+    // =========================================================
+    // DATA CHANNEL
+    // =========================================================
+    function send(msg) {
+      if (dataChannel?.readyState !== 'open') return;
+      dataChannel.send(JSON.stringify(msg));
+    }
+    function sendStrokeStart(id, color, width, target) { send({ type: 'strokeStart', id, color, width, target }); }
+    function sendStrokePoint(id, x, y)                 { send({ type: 'strokePoint', id, x, y }); }
+    function sendClear()                               { send({ type: 'clear' }); }
+    function sendErase(x, y, r, target)                { send({ type: 'erase', x, y, r, target }); }
+    function sendShape(s, done, target)                { send({ type: 'shape', id: s.id, tool: s.tool, color: s.color, width: s.width, a: s.a, b: s.b, done, target }); }
+    function sendChat(text)                            { send({ type: 'chat', text }); }
+    function sendCursor(x, y, penDown, tool, target)   { send({ type: 'cursor', x, y, penDown, tool, target }); }
+
+    function onDataChannelMessage(raw) {
+      let msg; try { msg = JSON.parse(raw); } catch { return; }
+
+      const tgt = msg.target || 'own';
+      // SAME PANE ON BOTH DEVICES:
+      //   drawer target 'own'  → my LEFT pane   (strokes / localCanvas)
+      //   drawer target 'peer' → my RIGHT pane  (remoteStrokes / remoteCanvas)
+      const arr    = tgt === 'peer' ? remoteStrokes : strokes;
+      const canvas = tgt === 'peer' ? remoteCanvas  : localCanvas;
+      const ctx    = tgt === 'peer' ? remoteCtx     : localCtx;
+
+      if (msg.type === 'strokeStart') {
+        remoteActiveStroke = {
+          id: msg.id, points: [], color: msg.color || PEER_COLOR,
+          width: msg.width || 4, tool: 'freehand'
+        };
+        arr.push(remoteActiveStroke);
+      }
+      else if (msg.type === 'strokePoint') {
+        if (!remoteActiveStroke || remoteActiveStroke.id !== msg.id) return;
+        remoteActiveStroke.points.push({ x: msg.x, y: msg.y });
+        drawLastSegment(ctx, remoteActiveStroke, canvas);
+      }
+      else if (msg.type === 'clear') {
+        strokes.length = 0;
+        remoteStrokes.length = 0;
+        activeStroke = null;
+        shapeStroke  = null;
+        redrawAllLocal();
+        redrawAllRemote();
+        redrawCursors();
+      }
+      else if (msg.type === 'erase') {
+        const pt = { x: msg.x, y: msg.y };
+        const changed = eraseAtInStrokes(arr, pt, msg.r || 0.035, canvas);
+        if (changed) {
+          if (tgt === 'peer') redrawAllRemote();
+          else redrawAllLocal();
+        }
+      }
+      else if (msg.type === 'shape') {
+        let s = arr.find(x => x.id === msg.id);
+        if (!s) {
+          s = { id: msg.id, tool: msg.tool, color: msg.color, width: msg.width, a: msg.a, b: msg.b };
+          arr.push(s);
+        }
+        s.tool = msg.tool; s.color = msg.color; s.width = msg.width;
+        s.a = msg.a; s.b = msg.b;
+        if (tgt === 'peer') redrawAllRemote();
+        else redrawAllLocal();
+      }
+      else if (msg.type === 'cursor') {
+        // SAME PANE ON BOTH DEVICES
+        peerCursorPane = tgt;       // 'own' → Me pane, 'peer' → Friend pane
+        peerCursorPos  = { x: msg.x, y: msg.y };
+        peerPenDown    = !!msg.penDown;
+        peerTool       = msg.tool || 'freehand';
+        redrawCursors();
+      }
+      else if (msg.type === 'chat') {
+        appendChatMessage(String(msg.text || '').slice(0, 500), 'peer', Date.now());
+      }
+    }
+
+    // =========================================================
+    // WEBRTC
+    // =========================================================
+    async function connectSignaling() {
+      return new Promise((resolve) => {
+        const room = new URLSearchParams(location.search).get('room') || 'demo';
+        const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${location.host}`;
+
+        if (ws) { try { ws.close(); } catch {} ws = null; }
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'join', room, password }));
+        };
+
+        ws.onmessage = async (evt) => {
+          const msg = JSON.parse(evt.data);
+
+          if (msg.type === 'error') {
+            passwordSubmit.disabled = false;
+            if (msg.message === 'Wrong password') {
+              passwordError.textContent = 'Wrong password. Try again.';
+              passwordInput.value = '';
+              passwordInput.focus();
+            } else {
+              passwordError.textContent = msg.message;
+            }
+            try { ws.close(); } catch {}
+            return resolve(false);
+          }
+
+          if (msg.type === 'joined') {
+            try { localStorage.setItem('airdraw_pw', password); } catch {}
+            authenticated = true;
+
+            passwordGate.classList.add('hidden');
+            passwordGate.style.opacity = '0';
+            passwordGate.style.pointerEvents = 'none';
+            setTimeout(() => { passwordGate.style.display = 'none'; }, 400);
+
+            isInitiator = msg.isInitiator;
+            MY_COLOR    = isInitiator ? '#ff3366' : '#00aaff';
+            PEER_COLOR  = isInitiator ? '#00aaff' : '#ff3366';
+
+            setStatus(`Room "${room}" — ${msg.peerCount}/2 peers`);
+            if (msg.peerCount === 2) {
+              await setupPeerConnection();
+              if (isInitiator) await createOffer();
+            }
+            return resolve(true);
+          }
+
+          if (msg.type === 'signal')   await handleSignal(msg.data);
+          if (msg.type === 'peerLeft') handlePeerLeft();
+        };
+
+        ws.onerror = () => {
+          setStatus('❌ Signaling error', 'error');
+          passwordError.textContent = 'Cannot reach server.';
+          passwordSubmit.disabled = false;
+          resolve(false);
+        };
+      });
+    }
+
+    async function setupPeerConnection() {
+      if (pc) return;
+      pc = new RTCPeerConnection(ICE_SERVERS);
+      for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
+      pc.ontrack = (evt) => { remoteVideo.srcObject = evt.streams[0]; };
+      pc.onicecandidate = (evt) => {
+        if (evt.candidate && ws?.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'signal', data: { kind: 'candidate', candidate: evt.candidate } }));
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        setStatus(`Connection: ${pc.connectionState}`,
+                  pc.connectionState === 'connected' ? 'ok' : '');
+        if (pc.connectionState === 'failed') setStatus('❌ Connection failed — reload both tabs.', 'error');
+      };
+      if (isInitiator) {
+        dataChannel = pc.createDataChannel('draw', { ordered: true });
+        wireDataChannel(dataChannel);
+      } else {
+        pc.ondatachannel = (evt) => { dataChannel = evt.channel; wireDataChannel(dataChannel); };
+      }
+    }
+    function wireDataChannel(dc) {
+      dc.onopen  = () => { setStatus('✅ Connected.', 'ok'); chatDot.classList.remove('off'); };
+      dc.onclose = () => { chatDot.classList.add('off'); };
+      dc.onerror = (e) => console.error('[dc] error', e);
+      dc.onmessage = (evt) => onDataChannelMessage(evt.data);
+    }
+    async function createOffer() {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({ type: 'signal', data: { kind: 'offer', sdp: offer.sdp } }));
+    }
+    async function handleSignal(data) {
+      if (!pc) await setupPeerConnection();
+      if (data.kind === 'offer') {
+        await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+        await flushPendingCandidates();
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ type: 'signal', data: { kind: 'answer', sdp: answer.sdp } }));
+      }
+      else if (data.kind === 'answer') {
+        await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+        await flushPendingCandidates();
+      }
+      else if (data.kind === 'candidate') {
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          try { await pc.addIceCandidate(data.candidate); }
+          catch (e) { console.warn('ICE add failed', e); }
+        } else pendingCandidates.push(data.candidate);
+      }
+    }
+    async function flushPendingCandidates() {
+      while (pendingCandidates.length) {
+        const c = pendingCandidates.shift();
+        try { await pc.addIceCandidate(c); }
+        catch (e) { console.warn('ICE add failed', e); }
+      }
+    }
+    function handlePeerLeft() {
+      setStatus('Peer left — waiting for someone to join.', 'error');
+      if (pc) { pc.close(); pc = null; }
+      remoteVideo.srcObject = null;
+      remoteStrokes.length = 0;
+      peerCursorPos  = null;
+      peerCursorPane = null;
+      redrawAllRemote();
+      redrawCursors();
+      isInitiator = false;
+      dataChannel = null;
+      pendingCandidates.length = 0;
+      chatDot.classList.add('off');
+    }
+
+    // =========================================================
+    // KEYBOARD SHORTCUTS
+    // =========================================================
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement === chatInput)     return;
+      if (document.activeElement === passwordInput) return;
+      const k = e.key.toLowerCase();
+      if (k === 'c') { strokes.length = 0; remoteStrokes.length = 0; activeStroke = null; shapeStroke = null;
+                       redrawAllLocal(); redrawAllRemote(); redrawCursors(); sendClear(); }
+      if (k === 'e') { currentTool = currentTool === 'eraser' ? 'freehand' : 'eraser'; refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 'p') { currentTool = 'freehand'; refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 'l') { currentTool = 'line';     refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 'o') { currentTool = 'circle';   refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 'r') { currentTool = 'rect';     refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 't') { currentTool = 'triangle'; refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+      if (k === 'a') { currentTool = 'arrow';    refreshActiveTool(); refreshActiveSize(); redrawCursors(); }
+    });
+
+    // =========================================================
+    // SERVICE WORKER (PWA)
+    // =========================================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+          console.warn('SW registration failed:', err);
+        });
+      });
+    }
+
+    // =========================================================
+    // BOOT
+    // =========================================================
+    (async () => {
+      refreshActiveTool();
+      refreshActiveSwatch();
+      refreshActiveSize();
+      chatDot.classList.add('off');
+      await startCamera();
+      setStatus('Enter password to connect.');
+    })();
+  </script>
+</body>
+</html>

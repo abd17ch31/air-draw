@@ -1,0 +1,12 @@
+{
+  "name": "air-draw",
+  "version": "1.0.0",
+  "description": "Video call with shared drawing canvas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
