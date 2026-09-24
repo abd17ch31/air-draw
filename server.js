@@ -122,12 +122,6 @@ const SECURITY_HEADERS = {
 };
 
 
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
-    message: "Server is running"
-  });
-});
 
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
